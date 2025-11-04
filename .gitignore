@@ -179,3 +179,47 @@ appsettings.Production.json
 # Build artifacts
 publish/
 *.publishproj
+
+# Flutter
+task_manager_flutter/.flutter-plugins
+task_manager_flutter/.flutter-plugins-dependencies
+task_manager_flutter/.packages
+task_manager_flutter/.pub/
+task_manager_flutter/.dart_tool/
+task_manager_flutter/build/
+task_manager_flutter/android/app/build/
+task_manager_flutter/ios/Flutter/App.framework
+task_manager_flutter/ios/Flutter/Flutter.framework
+task_manager_flutter/ios/build/
+task_manager_flutter/web/index.html
+task_manager_flutter/coverage/
+task_manager_flutter/lib/generated_plugin_registrant.dart
+
+# Android
+task_manager_flutter/android/.gradle/
+task_manager_flutter/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+task_manager_flutter/android/local.properties
+task_manager_flutter/android/key.properties
+
+# iOS
+task_manager_flutter/ios/Pods/
+task_manager_flutter/ios/Runner/GeneratedPluginRegistrant.*
+
+# Windows
+task_manager_flutter/windows/flutter/generated_plugin_registrant.*
+task_manager_flutter/windows/flutter/generated_plugins.cmake
+
+# macOS
+task_manager_flutter/macos/Flutter/GeneratedPluginRegistrant.swift
+task_manager_flutter/macos/Flutter/ephemeral/
+
+# Linux
+task_manager_flutter/linux/flutter/generated_plugin_registrant.*
+task_manager_flutter/linux/flutter/generated_plugins.cmake
+
+# Test coverage
+task_manager_flutter/coverage/
+
+# IDE files
+task_manager_flutter/.idea/
+task_manager_flutter/*.iml

@@ -7,6 +7,7 @@ namespace TaskManagerAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [IgnoreAntiforgeryToken]
     public class TasksController : ControllerBase
     {
         private readonly TaskContext _context;

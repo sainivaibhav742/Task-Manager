@@ -36,6 +36,16 @@ app.UseHttpsRedirection();
 // Enable CORS
 app.UseCors("AllowAll");
 
+// Disable antiforgery for API endpoints
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.RequestServices.GetService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>()?.SetCookieTokenAndHeader(context);
+    }
+    await next();
+});
+
 app.UseAuthorization();
 
 app.MapControllers();
