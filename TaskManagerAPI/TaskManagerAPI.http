@@ -1,0 +1,39 @@
+@TaskManagerAPI_HostAddress = http://localhost:5187
+
+GET {{TaskManagerAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+GET {{TaskManagerAPI_HostAddress}}/api/tasks
+Accept: application/json
+
+###
+
+POST {{TaskManagerAPI_HostAddress}}/api/tasks
+Content-Type: application/json
+
+{
+  "title": "Sample Task",
+  "description": "This is a sample task",
+  "isCompleted": false
+}
+
+###
+
+PUT {{TaskManagerAPI_HostAddress}}/api/tasks/1
+Content-Type: application/json
+
+{
+  "id": 1,
+  "title": "Updated Task",
+  "description": "This is an updated task",
+  "isCompleted": true
+}
+
+###
+
+DELETE {{TaskManagerAPI_HostAddress}}/api/tasks/1
+Accept: application/json
+
+###
