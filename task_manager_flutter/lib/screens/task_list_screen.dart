@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../models/task.dart';
 import '../services/api_service.dart';
 import 'add_task_screen.dart';
@@ -19,22 +21,94 @@ enum SortOption { date, completion }
 
 class _TaskListScreenState extends State<TaskListScreen> {
   final ApiService apiService = ApiService();
-  late Future<List<Task>> futureTasks;
+  Future<List<Task>>? futureTasks;
   List<Task> allTasks = [];
   List<Task> filteredTasks = [];
   String searchQuery = '';
   SortOption sortOption = SortOption.date;
 
+  // Add local storage for tasks
+  static const String _tasksKey = 'local_tasks';
+
   @override
   void initState() {
     super.initState();
-    futureTasks = apiService.getTasks();
+    _loadTasks();
+  }
+
+  Future<void> _loadTasks() async {
+    try {
+      // Try to load from API first
+      final apiTasks = await apiService.getTasks();
+      setState(() {
+        allTasks = apiTasks;
+        _applyFiltersAndSort();
+      });
+      // Save to local storage
+      await _saveTasksToLocal(apiTasks);
+    } catch (e) {
+      // If API fails, load from local storage
+      final localTasks = await _loadTasksFromLocal();
+      setState(() {
+        allTasks = localTasks;
+        _applyFiltersAndSort();
+      });
+    }
   }
 
   void _refreshTasks() {
+    _loadTasks();
+  }
+
+  Future<List<Task>> _loadTasksFromLocal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final tasksJson = prefs.getStringList(_tasksKey) ?? [];
+      return tasksJson.map((jsonStr) {
+        final Map<String, dynamic> json = jsonDecode(jsonStr);
+        return Task.fromJson(json);
+      }).toList();
+    } catch (e) {
+      print('Error loading tasks from local storage: $e');
+      return [];
+    }
+  }
+
+  Future<void> _saveTasksToLocal(List<Task> tasks) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final tasksJson = tasks.map((task) => jsonEncode(task.toJson())).toList();
+      await prefs.setStringList(_tasksKey, tasksJson);
+    } catch (e) {
+      print('Error saving tasks to local storage: $e');
+    }
+  }
+
+  Future<void> _addTaskToLocal(Task task) async {
     setState(() {
-      futureTasks = apiService.getTasks();
+      allTasks.insert(0, task);
+      _applyFiltersAndSort();
     });
+    await _saveTasksToLocal(allTasks);
+  }
+
+  Future<void> _updateTaskInLocal(Task updatedTask) async {
+    setState(() {
+      final index = allTasks.indexWhere((task) => task.id == updatedTask.id);
+      if (index != -1) {
+        allTasks[index] = updatedTask;
+        _applyFiltersAndSort();
+      }
+    });
+    await _saveTasksToLocal(allTasks);
+  }
+
+  Future<void> _deleteTaskFromLocal(int id) async {
+    setState(() {
+      allTasks.removeWhere((task) => task.id == id);
+      _applyFiltersAndSort();
+    });
+    await _saveTasksToLocal(allTasks);
   }
 
   void _filterTasks(String query) {
@@ -130,12 +204,27 @@ class _TaskListScreenState extends State<TaskListScreen> {
         onRefresh: () async {
           _refreshTasks();
         },
-        child: FutureBuilder<List<Task>>(
+        child: futureTasks != null ? FutureBuilder<List<Task>>(
           future: futureTasks,
           builder: (context, snapshot) {
             if (snapshot.hasData) {
               allTasks = snapshot.data!;
+              _applyFiltersAndSort(); // Apply filters and sorting
               List<Task> tasksToDisplay = searchQuery.isEmpty ? allTasks : filteredTasks;
+              if (tasksToDisplay.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.task_alt, size: 80, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text('No tasks yet', style: TextStyle(fontSize: 20, color: Colors.grey)),
+                      SizedBox(height: 8),
+                      Text('Tap the + button to add your first task', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+                    ],
+                  ),
+                );
+              }
               return ListView.builder(
                 itemCount: tasksToDisplay.length,
                 itemBuilder: (context, index) {
@@ -175,19 +264,24 @@ class _TaskListScreenState extends State<TaskListScreen> {
                     trailing: Checkbox(
                       value: task.isCompleted,
                       onChanged: (bool? value) async {
-                        Task updatedTask = Task(
-                          id: task.id,
-                          title: task.title,
-                          description: task.description,
-                          isCompleted: value ?? false,
-                          createdAt: task.createdAt,
-                          category: task.category,
-                          dueDate: task.dueDate,
-                          priority: task.priority,
-                        );
-                        await apiService.updateTask(updatedTask);
-                        _refreshTasks();
-                      },
+                          Task updatedTask = Task(
+                            id: task.id,
+                            title: task.title,
+                            description: task.description,
+                            isCompleted: value ?? false,
+                            createdAt: task.createdAt,
+                            category: task.category,
+                            dueDate: task.dueDate,
+                            priority: task.priority,
+                          );
+                          await _updateTaskInLocal(updatedTask);
+                          // Try to sync with API in background
+                          try {
+                            await apiService.updateTask(updatedTask);
+                          } catch (e) {
+                            print('Background sync failed: $e');
+                          }
+                        },
                     ),
                     onTap: () {
                       Navigator.push(
@@ -218,8 +312,13 @@ class _TaskListScreenState extends State<TaskListScreen> {
                         },
                       );
                       if (confirm == true) {
-                        await apiService.deleteTask(task.id);
-                        _refreshTasks();
+                        await _deleteTaskFromLocal(task.id);
+                        // Try to sync with API in background
+                        try {
+                          await apiService.deleteTask(task.id);
+                        } catch (e) {
+                          print('Background sync failed: $e');
+                        }
                       }
                     },
                   );
@@ -230,16 +329,18 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    Icon(Icons.wifi_off, size: 64, color: Colors.orange),
                     SizedBox(height: 16),
-                    Text('Failed to load tasks', style: TextStyle(fontSize: 18)),
+                    Text('Backend Not Connected', style: TextStyle(fontSize: 18)),
                     SizedBox(height: 8),
-                    Text('${snapshot.error}', style: TextStyle(color: Colors.grey)),
+                    Text('Start your TaskManagerAPI backend to sync tasks', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
                     SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: _refreshTasks,
-                      child: Text('Retry'),
+                      child: Text('Retry Connection'),
                     ),
+                    SizedBox(height: 8),
+                    Text('App works offline - you can still add tasks locally', style: TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
                   ],
                 ),
               );
@@ -255,14 +356,29 @@ class _TaskListScreenState extends State<TaskListScreen> {
               ),
             );
           },
+        ) : Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.task_alt, size: 80, color: Colors.grey),
+              SizedBox(height: 16),
+              Text('Welcome to Task Manager', style: TextStyle(fontSize: 20, color: Colors.grey)),
+              SizedBox(height: 8),
+              Text('Tap the + button to add your first task', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+            ],
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          final result = await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => AddTaskScreen()),
-          ).then((_) => _refreshTasks());
+          );
+          if (result != null && result is Task) {
+            // Add the new task to the local list immediately
+            await _addTaskToLocal(result);
+          }
         },
         child: Icon(Icons.add),
       ),
